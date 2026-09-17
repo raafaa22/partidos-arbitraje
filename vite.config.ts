@@ -7,6 +7,11 @@ const BASE = '/partidos-arbitraje/'
 
 export default defineConfig({
   base: BASE,
+  // Los fallos que solo pasan en el movil hay que poder situarlos: sin mapas,
+  // el mensaje es un "undefined is not a function" sobre codigo minificado.
+  build: { sourcemap: true },
+  // El worker es un modulo ES: usa import dinamico y await de primer nivel.
+  worker: { format: 'es' },
   // Se inyecta la hora de compilación para poder ver desde Ajustes si el
   // navegador está ejecutando una versión vieja.
   define: {

@@ -1,4 +1,5 @@
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// El worker va envuelto para parchear lo que le falta a iOS antes de arrancar.
+import workerUrl from './pdf-worker?worker&url'
 import {
   countDemoMarks, findDesignacion, findKickoff, linesFromItems, readSettlement,
   type PlacedText, type Settlement,

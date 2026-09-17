@@ -211,8 +211,20 @@ function emptyMatch(id: string): Match {
   }
 }
 
+/**
+ * El mensaje del error mas su tipo y el primer punto de la pila. Un
+ * "undefined is not a function" a secas no sirve para nada cuando el fallo solo
+ * pasa en el movil de otra persona.
+ */
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  if (!(error instanceof Error)) return String(error)
+  const origen = error.stack
+    ?.split('\n')
+    .slice(1)
+    .find((linea) => linea.includes('.js') || linea.includes('.mjs'))
+    ?.trim()
+    .slice(0, 120)
+  return [error.name, error.message, origen].filter(Boolean).join(' · ')
 }
 
 /**
