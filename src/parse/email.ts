@@ -44,9 +44,18 @@ export function isDesignationEmail(text: string): boolean {
   return designationKind(text) !== null
 }
 
-/** Espacios raros a espacios normales: el comité usa mucho el espacio duro. */
+/**
+ * Deja el texto en condiciones de ser analizado:
+ *
+ *  - Los espacios raros pasan a espacios normales: el comite usa mucho el duro.
+ *  - Las etiquetas <br> pasan a saltos de linea. El comite las mete dentro del
+ *    texto plano del correo; al bajarlo ya se limpian, pero esto arregla
+ *    tambien lo que se guardo antes de saberlo, sin volver a descargar nada.
+ */
 function normalize(text: string): string {
-  return text.replace(/[\u00a0\u2007\u202f\u2009]/g, ' ')
+  return text
+    .replace(/[\u00a0\u2007\u202f\u2009]/g, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
 }
 
 /** Las etiquetas del correo, con las variantes y erratas que escribe el comité. */

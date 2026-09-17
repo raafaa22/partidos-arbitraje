@@ -78,7 +78,7 @@ const DEFAULT_QUERY =
  * reglas viejas se quedarian mal para siempre, porque la sincronizacion no
  * vuelve a tocar un correo que ya conoce.
  */
-export const DATA_VERSION = 5
+export const DATA_VERSION = 6
 
 export const DEFAULT_SETTINGS: Settings = {
   clientId: DEFAULT_CLIENT_ID,

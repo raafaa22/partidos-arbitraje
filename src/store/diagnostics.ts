@@ -28,8 +28,10 @@ export function diagnose(matches: Match[]): Diagnostics {
     const tipo = match.kind ?? 'sin reconocer'
     tipos.set(tipo, (tipos.get(tipo) ?? 0) + 1)
     if (match.error) {
-      // Los mensajes llevan detalles distintos: se agrupan por su comienzo.
-      const clave = match.error.split(':')[0].trim()
+      // Se conserva el mensaje casi entero: el detalle que va detras de los dos
+      // puntos es justo lo que dice POR QUE ha fallado, y recortarlo deja el
+      // diagnostico inservible para averiguar nada.
+      const clave = match.error.trim().slice(0, 140)
       errores.set(clave, (errores.get(clave) ?? 0) + 1)
     }
     if (match.receivedAt) fechas.push(match.receivedAt)

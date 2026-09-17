@@ -138,7 +138,37 @@ function walk(part: GmailPart | undefined, visit: (part: GmailPart) => void): vo
   for (const child of part.parts ?? []) walk(child, visit)
 }
 
-/** El cuerpo en texto plano; si el correo solo trae HTML, se le quitan las etiquetas. */
+/** Delata que el texto lleva etiquetas dentro, venga de donde venga. */
+const HAS_TAGS = /<\s*(br|p|div|table|tbody|tr|td|span|font|b|i|u|strong)\b[^>]*>/i
+
+/**
+ * Quita el marcado y deja texto legible. Los saltos de linea importan: el
+ * analizador del correo se apoya en ellos para saber donde acaba cada campo.
+ */
+function stripMarkup(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
+    // El & va el ultimo, o "&amp;lt;" acabaria convertido en "<".
+    .replace(/&amp;/g, '&')
+}
+
+/**
+ * El cuerpo del correo en texto legible.
+ *
+ * El comite manda etiquetas HTML METIDAS EN LA PARTE DE TEXTO PLANO, asi que no
+ * vale con limpiar solo cuando el correo viene en HTML: hay que mirar si el
+ * texto trae etiquetas y limpiarlo igualmente. Si no, los valores se quedan con
+ * un "<BR>" pegado al final y salen asi en pantalla.
+ */
 export function plainTextBody(message: GmailMessage): string {
   let plain = ''
   let html = ''
@@ -148,19 +178,9 @@ export function plainTextBody(message: GmailMessage): string {
     if (part.mimeType === 'text/plain' && !plain) plain = decodeBody(data)
     if (part.mimeType === 'text/html' && !html) html = decodeBody(data)
   })
-  if (plain) return plain
-  if (!html) return message.snippet ?? ''
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
+
+  const body = plain || html || message.snippet || ''
+  return HAS_TAGS.test(body) ? stripMarkup(body) : body
 }
 
 export interface Attachment {
