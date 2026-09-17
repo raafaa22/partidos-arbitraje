@@ -265,6 +265,36 @@ Cada push a `main` lanza el workflow de GitHub Actions, que pasa las pruebas y
 publica en GitHub Pages. Hay que activarlo una vez en **Settings → Pages →
 Source: GitHub Actions**.
 
+## Por qué hay polyfills (y por qué el worker va envuelto)
+
+En iOS **todos** los navegadores corren sobre el motor de Safari, Chrome
+incluido, así que la versión del sistema manda. Y ahí pdf.js se rompe por una
+carencia concreta de WebKit:
+
+```js
+// pdf.js, getTextContent()
+const stream = this.streamTextContent(params)
+for await (const chunk of stream) { … }
+```
+
+WebKit no implementa `ReadableStream[Symbol.asyncIterator]`, que Chrome y
+Firefox sí tienen. Sin él, leer un PDF falla con un `undefined is not a
+function` que no dice de qué. `src/lib/polyfills.ts` lo añade recorriendo el
+stream con su lector, que es justo lo que haría el iterador.
+
+De paso se cubren `Promise.withResolvers` (iOS 17.4+), `structuredClone`
+(15.4+) y `Array.prototype.at` (16.4+), que pdf.js también usa.
+
+**El worker va envuelto** (`src/parse/pdf-worker.ts`) porque tiene su propio
+contexto global: lo que se parchea en la página no llega ahí. El envoltorio
+pone los parches y después carga el worker de verdad con un import **dinámico**
+— uno estático se evaluaría antes que cualquier código del módulo, o sea, sin
+los parches puestos.
+
+La compilación genera mapas de código (`build.sourcemap`) y los errores guardan
+tipo y origen. Es lo que permitió localizar esto: el mensaje del móvil traía
+`index-CQE37LPl.js:18:1056`, y el mapa lo situó en `getTextContent()`.
+
 ## Varias cuentas de Google
 
 Los partidos se guardan por cuenta: `pa.matches.v1:<correo>`. Al sincronizar se

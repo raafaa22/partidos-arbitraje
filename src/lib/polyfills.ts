@@ -14,6 +14,47 @@ interface Resolvers<T> {
 }
 
 export function installPolyfills(): void {
+  // Lo que de verdad tumbaba la lectura de PDF en el iPhone.
+  //
+  // pdf.js recorre el texto con `for await (const x of stream)` sobre un
+  // ReadableStream, y WebKit no implementa `ReadableStream[Symbol.asyncIterator]`
+  // (Chrome y Firefox si). Sin el, `getTextContent()` revienta con un
+  // "undefined is not a function", porque el motor busca el iterador asincrono
+  // del stream y no lo encuentra.
+  //
+  // El parche recorre el stream con su lector, que es justo lo que haria el
+  // iterador: `read()` ya devuelve `{ done, value }`.
+  if (
+    typeof ReadableStream !== 'undefined' &&
+    typeof (ReadableStream.prototype as { [Symbol.asyncIterator]?: unknown })[
+      Symbol.asyncIterator
+    ] !== 'function'
+  ) {
+    const values = function values<T>(this: ReadableStream<T>) {
+      const reader = this.getReader()
+      return {
+        next: () => reader.read(),
+        async return(value?: unknown) {
+          await reader.cancel()
+          return { done: true as const, value }
+        },
+        [Symbol.asyncIterator]() {
+          return this
+        },
+      }
+    }
+    Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
+      configurable: true,
+      writable: true,
+      value: values,
+    })
+    Object.defineProperty(ReadableStream.prototype, 'values', {
+      configurable: true,
+      writable: true,
+      value: values,
+    })
+  }
+
   // Safari 17.4+ / iOS 17.4+. Se mira sin tipos: el proyecto compila contra
   // ES2022, donde este metodo todavia no existe.
   const PromiseCtor = Promise as unknown as { withResolvers?: unknown }
