@@ -68,3 +68,36 @@ export function isPast(iso: string | null): boolean {
   if (!iso) return true
   return new Date(iso).getTime() < Date.now()
 }
+
+/**
+ * Un nombre de equipo reducido a lo comparable. El mismo partido llega de dos
+ * federaciones con formatos distintos: "(604001) Córdoba CF" y "CORDOBA CF"
+ * son el mismo equipo, pero no se parecen en nada como cadenas.
+ *
+ * Se quitan los codigos entre parentesis, los acentos, la puntuacion y las
+ * mayusculas.
+ */
+export function teamKey(name: string | null): string {
+  if (!name) return ''
+  return fold(name)
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toUpperCase()
+}
+
+/**
+ * Identifica un partido con independencia de quien lo designe: mismo dia, misma
+ * hora y mismos equipos. Vacio si falta algo, porque sin los tres datos no hay
+ * forma de afirmar que dos designaciones son el mismo partido.
+ */
+export function matchKey(
+  kickoff: string | null,
+  homeTeam: string | null,
+  awayTeam: string | null,
+): string {
+  const home = teamKey(homeTeam)
+  const away = teamKey(awayTeam)
+  if (!kickoff || !home || !away) return ''
+  return `${kickoff}|${home}|${away}`
+}

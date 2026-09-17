@@ -4,6 +4,8 @@ export interface Match {
   threadId: string
   /** Numero de designacion del comite, p.ej. "1968465". */
   designacion: string | null
+  /** Otras designaciones del MISMO partido, cuando lo designa mas de una federacion. */
+  otherDesignaciones: string[]
   /** Fecha y hora del partido, ISO local: "2026-09-05T20:00". */
   kickoff: string | null
   competition: string | null

@@ -1,3 +1,4 @@
+import { matchKey } from '../lib/text'
 import { mergeDetails } from '../parse/designation'
 import type { Match, MatchFlags } from '../types'
 import { EMPTY_FLAGS, effectiveDemo } from './db'
@@ -9,6 +10,8 @@ export interface Resolution {
   merged: number
   /** Designaciones cuyo último correo era una anulación. */
   cancelled: number
+  /** Designaciones distintas que resultaron ser el mismo partido. */
+  sameMatch: number
 }
 
 /**
@@ -83,6 +86,8 @@ export function resolveDesignations(
       ...mergeDetails(base, ...chain.slice(1), ...recent),
       cancelled: isCancelled,
       amount: base.amount ?? chain.find((entry) => entry.amount !== null)?.amount ?? null,
+      // Lo guardado por versiones anteriores no trae este campo.
+      otherDesignaciones: [...new Set(recent.flatMap((entry) => entry.otherDesignaciones ?? []))],
     }
     kept.push(winner)
 
@@ -105,7 +110,94 @@ export function resolveDesignations(
     }
   }
 
-  return { matches: kept, flags: nextFlags, merged, cancelled }
+  const joined = joinSameMatch(kept, nextFlags)
+  return { ...joined, merged, cancelled }
+}
+
+/**
+ * Junta designaciones DISTINTAS que son el mismo partido.
+ *
+ * Una competicion nacional la designan dos federaciones: la territorial y la
+ * nacional, cada una con su numeracion y su formato. El mismo Córdoba CF –
+ * Pozuelo llega como designacion 1970459 ("CORDOBA CF") y como 4114989
+ * ("(604001) Córdoba CF"), asi que agrupar por numero no las une y el partido
+ * sale dos veces.
+ *
+ * Se identifica el partido por fecha, hora y equipos, con los nombres reducidos
+ * a lo comparable. Si falta alguno de los tres datos no se junta nada: sin
+ * ellos no hay forma de afirmar que son el mismo.
+ */
+function joinSameMatch(
+  matches: Match[],
+  flags: Record<string, MatchFlags>,
+): { matches: Match[]; flags: Record<string, MatchFlags>; sameMatch: number } {
+  const groups = new Map<string, Match[]>()
+  const loose: Match[] = []
+
+  for (const match of matches) {
+    const key = matchKey(match.kickoff, match.homeTeam, match.awayTeam)
+    if (!key) {
+      loose.push(match)
+      continue
+    }
+    const group = groups.get(key)
+    if (group) group.push(match)
+    else groups.set(key, [match])
+  }
+
+  const kept = [...loose]
+  const nextFlags: Record<string, MatchFlags> = {}
+  let sameMatch = 0
+
+  for (const match of loose) {
+    if (flags[match.id]) nextFlags[match.id] = flags[match.id]
+  }
+
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      kept.push(group[0])
+      if (flags[group[0].id]) nextFlags[group[0].id] = flags[group[0].id]
+      continue
+    }
+    sameMatch += group.length - 1
+
+    const recent = [...group].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+    const alive = recent.filter((entry) => !entry.cancelled)
+    const pool = alive.length ? alive : recent
+    // Manda la que trae el importe: es la que dice lo que se cobra.
+    const base = pool.find((entry) => entry.amount !== null) ?? pool[0]
+
+    const others = group
+      .filter((entry) => entry !== base)
+      .flatMap((entry) => [entry.designacion, ...(entry.otherDesignaciones ?? [])])
+      .filter((value): value is string => Boolean(value))
+
+    kept.push({
+      ...base,
+      ...mergeDetails(base, ...pool, ...recent),
+      amount: base.amount ?? pool.find((entry) => entry.amount !== null)?.amount ?? null,
+      otherDesignaciones: [...new Set(others)],
+    })
+
+    const combined = group.map((entry) => flagsFor(flags, entry.id))
+    const baseFlags = flagsFor(flags, base.id)
+    nextFlags[base.id] = {
+      paid: combined.some((entry) => entry.paid),
+      paidAt: earliest(combined.map((entry) => entry.paidAt)),
+      deleted: combined.some((entry) => entry.deleted),
+      deletedAt: earliest(combined.map((entry) => entry.deletedAt)),
+      amountOverride:
+        baseFlags.amountOverride ??
+        combined.find((entry) => entry.amountOverride !== null)?.amountOverride ??
+        null,
+      demoOverride:
+        baseFlags.demoOverride ??
+        combined.find((entry) => entry.demoOverride !== null)?.demoOverride ??
+        null,
+    }
+  }
+
+  return { matches: kept, flags: nextFlags, sameMatch }
 }
 
 /**

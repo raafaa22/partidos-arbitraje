@@ -56,6 +56,10 @@ export default function MatchDetail({
           <Row label="Función" value={match.role} />
           <Row label="Designación" value={match.designacion} />
           <Row
+            label="Misma designación en otra federación"
+            value={(match.otherDesignaciones ?? []).join(', ') || null}
+          />
+          <Row
             label="Estado final"
             value={
               match.kind === 'anulada'

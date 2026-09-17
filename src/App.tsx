@@ -132,6 +132,7 @@ export default function App() {
         `${result.matches.length} partido(s) tras reanalizar`,
         result.removed ? `${result.removed} registros vacíos tirados, se reintentarán` : null,
         result.merged ? `${result.merged} correos eran del mismo partido` : null,
+        result.sameMatch ? `${result.sameMatch} designación(es) de otra federación` : null,
         result.cancelled ? `${result.cancelled} anulado(s)` : null,
         result.marked ? `${result.marked} dados por cobrados por ser de antes de la temporada` : null,
       ]
@@ -196,6 +197,9 @@ export default function App() {
               : 'Sin correos nuevos',
             `${resolved.matches.length} partido(s)`,
             resolved.merged ? `${resolved.merged} correos del mismo partido` : null,
+            resolved.sameMatch
+              ? `${resolved.sameMatch} designación(es) duplicada(s) de otra federación`
+              : null,
             resolved.removed ? `${resolved.removed} registros vacíos tirados` : null,
             resolved.cancelled ? `${resolved.cancelled} anulado(s)` : null,
             demos ? `${demos} demo(s)` : null,

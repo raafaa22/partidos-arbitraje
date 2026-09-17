@@ -186,6 +186,7 @@ function emptyMatch(id: string): Match {
     id,
     threadId: id,
     designacion: null,
+    otherDesignaciones: [],
     kickoff: null,
     competition: null,
     group: null,

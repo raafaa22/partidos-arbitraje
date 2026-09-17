@@ -100,6 +100,29 @@ Todos se importan y después se resuelve el estado final de cada designación
 5. **Las marcas de cobrado, de borrado y los importes corregidos a mano se
    arrastran** desde los correos que se descartan.
 
+### El mismo partido con dos números de designación
+
+Las competiciones nacionales las designan **dos federaciones**: la territorial y
+la nacional, cada una con su numeración y su formato. El mismo Córdoba CF –
+Pozuelo llega como designación `1970459` y como `4114989`:
+
+| | 4114989 | 1970459 |
+|---|---|---|
+| Competición | SEGUNDA FEDERACIÓN DE FÚTBOL FEMENINO · LIGA - GRUPO 3 | SEGUNDA FEDERACION FEMENINA |
+| Equipos | (604001) Córdoba CF | CORDOBA CF |
+| Campo | Ciudad Deportiva Córdoba CF campo 1 | Córdoba - CIUDAD DEPORTIVA CORDOBA CF (F11) (N) |
+
+Agrupar por número no las une, así que el partido salía dos veces. Después de
+resolver por designación hay una segunda pasada que identifica el partido por
+**fecha, hora y equipos**, con los nombres reducidos a lo comparable: fuera los
+códigos entre paréntesis, los acentos, la puntuación y las mayúsculas
+(`teamKey` y `matchKey` en `src/lib/text.ts`).
+
+Gana la designación que trae el importe, que es la que dice lo que se cobra, y
+la otra queda anotada en el detalle. Si falta la fecha o alguno de los equipos
+no se junta nada: sin los tres datos no hay forma de afirmar que son el mismo
+partido.
+
 Dos cosas que parecen detalles y son las que cuestan dinero:
 
 - **Una demo no puede anular ni pisar un partido real.** Sin el paso 2, una
