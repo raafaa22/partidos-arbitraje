@@ -14,6 +14,7 @@ interface Props {
   onClose: () => void
   onSignOut: () => void
   onExport: () => void
+  onImport: (file: File) => void
   onReanalyze: () => void
   onWipe: () => void
 }
@@ -21,6 +22,22 @@ interface Props {
 /** Momento en que se compiló lo que se está ejecutando. Sirve para saber de un
  *  vistazo si el navegador tiene cargada una versión vieja. */
 const BUILD = __BUILD__
+
+/**
+ * Si la app corre instalada o dentro del navegador. En iOS son DOS almacenes
+ * distintos: lo que se apunta en una no se ve en la otra, y eso parece una
+ * perdida de datos cuando en realidad se esta mirando en otro sitio.
+ */
+const DONDE = (() => {
+  try {
+    const instalada =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as { standalone?: boolean }).standalone === true
+    return instalada ? 'App instalada' : 'Navegador'
+  } catch {
+    return 'Navegador'
+  }
+})()
 
 function Fila({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
   if (valor === null) return null
@@ -33,8 +50,8 @@ function Fila({ etiqueta, valor }: { etiqueta: string; valor: string | null }) {
 }
 
 export default function SettingsPanel({
-  settings, account, matches, matchCount, onSave, onClose, onSignOut, onExport, onReanalyze,
-  onWipe,
+  settings, account, matches, matchCount, onSave, onClose, onSignOut, onExport, onImport,
+  onReanalyze, onWipe,
 }: Props) {
   useSheet(onClose)
 
@@ -118,6 +135,7 @@ export default function SettingsPanel({
         <dl className="rows">
           <Fila etiqueta="Versión del análisis" valor={`v${DATA_VERSION} · ${BUILD}`} />
           <Fila etiqueta="Cuenta" valor={account} />
+          <Fila etiqueta="Abierta como" valor={DONDE} />
           <Fila etiqueta="Partidos guardados" valor={String(info.total)} />
           <Fila etiqueta="Sin importe leído" valor={String(info.sinImporte)} />
           <Fila etiqueta="Sin fecha de partido" valor={String(info.sinFecha)} />
@@ -158,6 +176,19 @@ export default function SettingsPanel({
         <div className="sheet-actions">
           <button className="ghost" onClick={onReanalyze}>Reanalizar lo guardado</button>
           <button className="ghost" onClick={onExport}>Exportar copia (JSON)</button>
+          <label className="ghost as-button">
+            Restaurar copia
+            <input
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) onImport(file)
+                event.target.value = ''
+              }}
+            />
+          </label>
           <button className="ghost" onClick={onSignOut}>Cerrar sesión de Google</button>
           {confirmWipe ? (
             <button className="ghost danger" onClick={onWipe}>

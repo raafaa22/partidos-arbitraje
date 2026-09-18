@@ -363,6 +363,9 @@ button { cursor: pointer; border: none; background: none; }
 
 .ghost.danger { color: var(--danger); border-color: var(--danger-soft); }
 
+/* Un <label> que hace de botón para el selector de ficheros. */
+.as-button { cursor: pointer; display: inline-block; }
+
 /* ---------- Hoja modal ---------- */
 
 .sheet-backdrop {

@@ -40,17 +40,42 @@ export function saveAccount(account: string | null): void {
  */
 export function adoptLegacyData(account: string): void {
   try {
-    for (const base of [MATCHES_KEY, FLAGS_KEY, EXPENSES_KEY]) {
-      const legacy = localStorage.getItem(base)
-      if (legacy === null) continue
-      if (localStorage.getItem(scoped(base, account)) === null) {
-        localStorage.setItem(scoped(base, account), legacy)
-      }
-      localStorage.removeItem(base)
+    adoptList<Match>(MATCHES_KEY, account)
+    adoptList<Expense>(EXPENSES_KEY, account)
+
+    const legacyFlags = localStorage.getItem(FLAGS_KEY)
+    if (legacyFlags !== null) {
+      const mine = read<Record<string, MatchFlags>>(scoped(FLAGS_KEY, account), {})
+      // Lo que ya estaba a nombre de la cuenta manda sobre lo heredado.
+      const merged = { ...(JSON.parse(legacyFlags) as Record<string, MatchFlags>), ...mine }
+      localStorage.setItem(scoped(FLAGS_KEY, account), JSON.stringify(merged))
+      localStorage.removeItem(FLAGS_KEY)
     }
-  } catch {
-    // Sin almacenamiento no hay nada que mover.
+  } catch (error) {
+    console.warn('No se han podido adoptar los datos anteriores', error)
   }
+}
+
+/**
+ * Junta la lista sin nombre de cuenta con la de la cuenta, sin perder nada.
+ *
+ * Antes, si la clave de la cuenta ya existia, la lista sin nombre se borraba
+ * SIN copiarse: todo lo apuntado mientras la app no sabia de quien era la
+ * sesion desaparecia sin dejar rastro.
+ */
+function adoptList<T extends { id: string }>(base: string, account: string): void {
+  const legacy = localStorage.getItem(base)
+  if (legacy === null) return
+
+  const inherited = JSON.parse(legacy) as T[]
+  const mine = read<T[]>(scoped(base, account), [])
+  const byId = new Map<string, T>()
+  for (const item of inherited) byId.set(item.id, item)
+  // Lo que ya estaba a nombre de la cuenta manda.
+  for (const item of mine) byId.set(item.id, item)
+
+  localStorage.setItem(scoped(base, account), JSON.stringify([...byId.values()]))
+  localStorage.removeItem(base)
 }
 
 /** Client ID de OAuth del proyecto de Google. No es un secreto: solo funciona

@@ -160,6 +160,10 @@ export default function App() {
         // De quién es esta sesión. Si es otra cuenta, se cambia de cajón: sus
         // partidos son suyos y no se mezclan con los del correo anterior.
         const email = await getAccountEmail(accessToken)
+        // Se reescribe siempre, no solo al cambiar de cuenta: si esta clave se
+        // pierde, todo se guardaria en el cajon sin nombre y podria acabar
+        // pisado al adoptar.
+        if (email) saveAccount(email)
         if (email && email !== account) {
           if (!account) adoptLegacyData(email)
           const mine = { matches: loadMatches(email), flags: loadFlags(email) }
@@ -367,6 +371,47 @@ export default function App() {
   const deleteExpense = useCallback((id: string) => {
     setExpenses((current) => current.filter((expense) => expense.id !== id))
   }, [])
+
+  /**
+   * Restaura una copia exportada. Se juntan los datos en vez de sustituirlos:
+   * una restauracion nunca debe llevarse por delante lo que ya hubiera.
+   */
+  const importData = useCallback(
+    async (file: File) => {
+      try {
+        const copia = JSON.parse(await file.text()) as {
+          matches?: Match[]
+          flags?: Record<string, MatchFlags>
+          expenses?: Expense[]
+        }
+
+        const base = latest.current
+        const porId = new Map(base.matches.map((match) => [match.id, match]))
+        for (const match of copia.matches ?? []) if (!porId.has(match.id)) porId.set(match.id, match)
+
+        const nextFlags = { ...(copia.flags ?? {}), ...base.flags }
+        apply([...porId.values()], nextFlags)
+
+        setExpenses((current) => {
+          const gastos = new Map(current.map((expense) => [expense.id, expense]))
+          for (const expense of copia.expenses ?? []) {
+            if (!gastos.has(expense.id)) gastos.set(expense.id, expense)
+          }
+          return [...gastos.values()]
+        })
+
+        setShowSettings(false)
+        setError(null)
+        setNotice(
+          `Copia restaurada: ${copia.matches?.length ?? 0} partido(s) y ` +
+            `${copia.expenses?.length ?? 0} gasto(s) en el fichero.`,
+        )
+      } catch {
+        setError('Ese fichero no parece una copia de la app.')
+      }
+    },
+    [apply],
+  )
 
   const exportData = () => {
     const blob = new Blob([JSON.stringify({ matches, flags, expenses, settings }, null, 2)], {
@@ -607,6 +652,7 @@ export default function App() {
             setNotice(null)
           }}
           onExport={exportData}
+          onImport={importData}
           onReanalyze={() => reanalyze()}
           onWipe={wipe}
         />
