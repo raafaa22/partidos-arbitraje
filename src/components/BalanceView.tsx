@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { formatEuro, formatShortDate } from '../lib/text'
-import { seasonLabel } from '../lib/season'
+import { isInSeason, seasonLabel } from '../lib/season'
 import { availableSeasons, seasonBalance } from '../store/balance'
+import { effectiveAmount, effectiveDemo, flagsFor } from '../store/db'
 import { EXPENSE_CATEGORIES, type Expense, type ExpenseCategory, type Match, type MatchFlags } from '../types'
 
 interface Props {
@@ -11,15 +12,17 @@ interface Props {
   season: number
   onSeason: (season: number) => void
   onAdd: (expense: Omit<Expense, 'id'>) => void
+  onUpdate: (id: string, expense: Omit<Expense, 'id'>) => void
   onDelete: (id: string) => void
 }
 
 const CATEGORY_LABEL = new Map(EXPENSE_CATEGORIES.map((c) => [c.id, c.label]))
 
 export default function BalanceView({
-  matches, flags, expenses, season, onSeason, onAdd, onDelete,
+  matches, flags, expenses, season, onSeason, onAdd, onUpdate, onDelete,
 }: Props) {
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Expense | null>(null)
 
   const seasons = useMemo(() => {
     const found = availableSeasons(matches, expenses)
@@ -32,13 +35,45 @@ export default function BalanceView({
     [season, matches, flags, expenses],
   )
 
-  const ofSeason = useMemo(
-    () =>
-      expenses
-        .filter((expense) => expense.date >= `${season}-07-01` && expense.date <= `${season + 1}-06-30`)
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [expenses, season],
-  )
+  /**
+   * Todo lo que ha entrado y salido en la temporada, junto y por fecha. Los
+   * ingresos salen de los partidos y no se pueden tocar aqui: vienen del correo
+   * y se gestionan en la otra pantalla. A mano solo se apuntan gastos.
+   */
+  const movements = useMemo(() => {
+    const income = matches
+      .filter((match) => {
+        const entry = flagsFor(flags, match.id)
+        if (entry.deleted || match.cancelled) return false
+        if (effectiveDemo(match, entry)) return false
+        return isInSeason(match.kickoff, season)
+      })
+      .map((match) => {
+        const entry = flagsFor(flags, match.id)
+        const teams = [match.homeTeam, match.awayTeam].filter(Boolean).join(' – ')
+        return {
+          kind: 'ingreso' as const,
+          id: match.id,
+          date: (match.kickoff ?? '').slice(0, 10),
+          concept: teams || 'Partido',
+          detail: entry.paid ? 'Cobrado' : 'Por cobrar',
+          amount: effectiveAmount(match, entry),
+        }
+      })
+
+    const spending = expenses
+      .filter((expense) => isInSeason(expense.date, season))
+      .map((expense) => ({
+        kind: 'gasto' as const,
+        id: expense.id,
+        date: expense.date,
+        concept: expense.concept,
+        detail: CATEGORY_LABEL.get(expense.category) ?? expense.category,
+        amount: expense.amount,
+      }))
+
+    return [...income, ...spending].sort((a, b) => b.date.localeCompare(a.date))
+  }, [matches, flags, expenses, season])
 
   return (
     <>
@@ -57,10 +92,13 @@ export default function BalanceView({
 
       <section className="hero">
         <div className="hero-label">Neto temporada {balance.label}</div>
-        <p className="hero-value">{formatEuro(balance.net)}</p>
+        <p className={`hero-value${balance.net < 0 ? ' negative' : ''}`}>
+          {formatEuro(balance.net)}
+        </p>
         <div className="hero-sub">
           {formatEuro(balance.gross)} arbitrados en {balance.matches} partido
-          {balance.matches === 1 ? '' : 's'}, menos {formatEuro(balance.expenses)} de gastos
+          {balance.matches === 1 ? '' : 's'}, menos{' '}
+          <span className="spent">{formatEuro(balance.expenses)}</span> de gastos
         </div>
       </section>
 
@@ -89,22 +127,31 @@ export default function BalanceView({
             {balance.byCategory.map((row) => (
               <div className="row" key={row.category}>
                 <dt>{CATEGORY_LABEL.get(row.category) ?? row.category}</dt>
-                <dd>{formatEuro(row.total)}</dd>
+                <dd className="spent">{formatEuro(row.total)}</dd>
               </div>
             ))}
           </dl>
         </>
       )}
 
-      <h3 className="section">Gastos de la temporada</h3>
+      <h3 className="section">Ingresos y gastos</h3>
 
-      {adding ? (
+      {adding || editing ? (
         <ExpenseForm
+          // Al pasar de un gasto a otro hay que rehacer el formulario, o se
+          // quedarían dentro los valores del anterior.
+          key={editing?.id ?? 'nuevo'}
           season={season}
-          onCancel={() => setAdding(false)}
-          onSave={(expense) => {
-            onAdd(expense)
+          initial={editing}
+          onCancel={() => {
             setAdding(false)
+            setEditing(null)
+          }}
+          onSave={(expense) => {
+            if (editing) onUpdate(editing.id, expense)
+            else onAdd(expense)
+            setAdding(false)
+            setEditing(null)
           }}
         />
       ) : (
@@ -113,30 +160,60 @@ export default function BalanceView({
         </button>
       )}
 
-      {ofSeason.length === 0 ? (
+      {movements.length === 0 ? (
         <div className="empty" style={{ marginTop: 12 }}>
-          Todavía no hay gastos apuntados en esta temporada.
+          Todavía no hay nada apuntado en esta temporada.
         </div>
       ) : (
         <div className="rows" style={{ marginTop: 12 }}>
-          {ofSeason.map((expense) => (
-            <div className="row expense" key={expense.id}>
-              <div>
-                <strong>{expense.concept}</strong>
-                <div className="meta">
-                  {formatShortDate(expense.date)} ·{' '}
-                  {CATEGORY_LABEL.get(expense.category) ?? expense.category}
-                </div>
-              </div>
-              <div className="expense-right">
-                <span className="amount">{formatEuro(expense.amount)}</span>
+          {movements.map((movement) => (
+            <div className="row expense" key={`${movement.kind}-${movement.id}`}>
+              {movement.kind === 'gasto' ? (
+                // Se pulsa el gasto para editarlo: dos botones por fila dejan
+                // los nombres de los equipos sin sitio en una pantalla de móvil.
                 <button
-                  className="icon-btn"
-                  onClick={() => onDelete(expense.id)}
-                  aria-label={`Borrar ${expense.concept}`}
+                  className="movement-main"
+                  aria-label={`Editar ${movement.concept}`}
+                  onClick={() => {
+                    setAdding(false)
+                    setEditing(expenses.find((e) => e.id === movement.id) ?? null)
+                  }}
                 >
-                  🗑
+                  <strong>{movement.concept}</strong>
+                  <div className="meta">
+                    {formatShortDate(movement.date)} · {movement.detail} · editar
+                  </div>
                 </button>
+              ) : (
+                <div>
+                  <strong>{movement.concept}</strong>
+                  <div className="meta">
+                    {movement.date ? `${formatShortDate(movement.date)} · ` : ''}
+                    {movement.detail}
+                  </div>
+                </div>
+              )}
+              <div className="expense-right">
+                {movement.amount === null ? (
+                  <span className="amount missing">Sin importe</span>
+                ) : (
+                  <span className={`amount ${movement.kind === 'gasto' ? 'spent' : 'earned'}`}>
+                    {movement.kind === 'gasto' ? '−' : '+'}
+                    {formatEuro(movement.amount)}
+                  </span>
+                )}
+                {movement.kind === 'gasto' ? (
+                  <button
+                    className="icon-btn"
+                    onClick={() => onDelete(movement.id)}
+                    aria-label={`Borrar ${movement.concept}`}
+                  >
+                    🗑
+                  </button>
+                ) : (
+                  // Los partidos vienen del correo: se editan desde su pantalla.
+                  <span className="icon-slot" aria-hidden="true" />
+                )}
               </div>
             </div>
           ))}
@@ -147,9 +224,11 @@ export default function BalanceView({
 }
 
 function ExpenseForm({
-  season, onSave, onCancel,
+  season, initial, onSave, onCancel,
 }: {
   season: number
+  /** El gasto que se está editando, o `null` si es uno nuevo. */
+  initial: Expense | null
   onSave: (expense: Omit<Expense, 'id'>) => void
   onCancel: () => void
 }) {
@@ -158,10 +237,11 @@ function ExpenseForm({
   // dentro de ella y no en el día de hoy.
   const inSeason = today >= `${season}-07-01` && today <= `${season + 1}-06-30`
 
-  const [concept, setConcept] = useState('')
-  const [amount, setAmount] = useState('')
-  const [date, setDate] = useState(inSeason ? today : `${season}-09-01`)
-  const [category, setCategory] = useState<ExpenseCategory>('cuota')
+  const [concept, setConcept] = useState(initial?.concept ?? '')
+  // Con dos decimales y coma, como se escribe y como se lee en la lista.
+  const [amount, setAmount] = useState(initial ? initial.amount.toFixed(2).replace('.', ',') : '')
+  const [date, setDate] = useState(initial?.date ?? (inSeason ? today : `${season}-09-01`))
+  const [category, setCategory] = useState<ExpenseCategory>(initial?.category ?? 'cuota')
   const [error, setError] = useState<string | null>(null)
 
   const save = () => {
@@ -216,7 +296,9 @@ function ExpenseForm({
       </label>
 
       <div className="sheet-actions">
-        <button className="primary" onClick={save}>Guardar gasto</button>
+        <button className="primary" onClick={save}>
+          {initial ? 'Guardar cambios' : 'Guardar gasto'}
+        </button>
         <button className="ghost" onClick={onCancel}>Cancelar</button>
       </div>
     </div>

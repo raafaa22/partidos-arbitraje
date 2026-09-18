@@ -1,14 +1,25 @@
 :root {
-  --bg: #0f1511;
-  --surface: #182019;
-  --surface-2: #1f2a21;
-  --line: #2b382d;
-  --text: #e8efe9;
-  --muted: #8ea394;
-  --accent: #35c66b;
-  --accent-ink: #06240f;
-  --warn: #e0a33a;
-  --danger: #e2575d;
+  /* Gris azulado en vez de negro: menos contraste duro de noche. */
+  --bg: #1b1f24;
+  --surface: #252a31;
+  --surface-2: #2e343c;
+  --line: #3a414a;
+
+  --text: #e9edf1;
+  --muted: #9aa5b1;
+
+  /* Verde pastel, el color de la app. El "ink" es el texto que va encima. */
+  --accent: #8fd9b0;
+  --accent-soft: rgba(143, 217, 176, 0.16);
+  --accent-ink: #14311f;
+
+  --warn: #e8c286;
+  --warn-soft: rgba(232, 194, 134, 0.14);
+
+  /* Rojo pastel: los gastos y los números en negativo. */
+  --danger: #ef9a9a;
+  --danger-soft: rgba(239, 154, 154, 0.14);
+
   --radius: 14px;
   color-scheme: dark;
 }
@@ -67,7 +78,7 @@ button { cursor: pointer; border: none; background: none; }
 .icon-btn:disabled { opacity: 0.45; }
 
 .hero {
-  background: linear-gradient(160deg, #1d3326, #16201a);
+  background: linear-gradient(160deg, #2b3a33, #232830);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 18px;
@@ -175,7 +186,7 @@ button { cursor: pointer; border: none; background: none; }
 }
 
 .card.is-paid { opacity: 0.62; }
-.card.is-demo { border-style: dashed; border-color: var(--warn); }
+.card.is-demo { border-style: dashed; border-color: var(--warn); background: var(--warn-soft); }
 
 .card-head {
   display: flex;
@@ -248,7 +259,7 @@ button { cursor: pointer; border: none; background: none; }
 }
 
 .pay-toggle[aria-pressed='true'] {
-  background: rgba(53, 198, 107, 0.16);
+  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 600;
@@ -289,7 +300,7 @@ button { cursor: pointer; border: none; background: none; }
   border: 1px solid;
 }
 
-.notice.error { background: rgba(226, 87, 93, 0.12); border-color: var(--danger); }
+.notice.error { background: var(--danger-soft); border-color: var(--danger); }
 
 .notice .link {
   color: inherit;
@@ -350,7 +361,7 @@ button { cursor: pointer; border: none; background: none; }
   font-size: 14px;
 }
 
-.ghost.danger { color: var(--danger); border-color: rgba(226, 87, 93, 0.4); }
+.ghost.danger { color: var(--danger); border-color: var(--danger-soft); }
 
 /* ---------- Hoja modal ---------- */
 
@@ -398,6 +409,17 @@ button { cursor: pointer; border: none; background: none; }
 .row:last-child { border-bottom: none; }
 
 .row.expense { align-items: center; }
+
+/* El gasto entero es el botón de editar. */
+.movement-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 0;
+  font: inherit;
+}
+
+.movement-main:hover strong { color: var(--accent); }
 .row.expense strong { font-size: 15px; }
 .row.expense .meta { font-size: 12.5px; margin-top: 2px; }
 
@@ -409,6 +431,16 @@ button { cursor: pointer; border: none; background: none; }
 }
 
 .expense-right .amount { font-size: 16px; }
+
+/* Lo que sale de la cuenta en rojo, lo que entra en verde. */
+.spent { color: var(--danger); }
+.earned { color: var(--accent); }
+
+/* Hueco del botón de borrar en las filas que no lo llevan, para que los
+   importes de ingresos y gastos queden alineados en la misma columna. */
+.icon-slot { width: 34px; flex: none; }
+
+.hero-value.negative { color: var(--danger); }
 .expense-right .icon-btn { width: 34px; height: 34px; font-size: 15px; }
 .row dt { color: var(--muted); margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .row dd { margin: 0; text-align: right; overflow-wrap: anywhere; flex: none; max-width: 60%; }

@@ -341,11 +341,22 @@ pretemporada de julio y agosto pertenecen a la temporada que empieza, no a la
 que acaba de terminar. Con el corte en septiembre se quedarían fuera de todo
 balance (`src/lib/season.ts`).
 
-### Gastos
+### Ingresos y gastos
 
-Concepto, importe, fecha y categoría (cuota, mutualidad, material,
-desplazamiento, cursos, otros). Se guardan por cuenta, igual que los partidos, y
-entran en el balance de la temporada en la que cae su fecha.
+Debajo del resumen va el movimiento de la temporada en una sola lista ordenada
+por fecha: los partidos en verde con un `+` y los gastos en rojo con un `−`.
+
+Los ingresos **no se pueden tocar desde ahí**: vienen del correo y se gestionan
+en la pantalla de partidos, así que solo llevan botón de borrar los gastos. Un
+partido cuyo importe no se ha podido leer sale igualmente, marcado como "Sin
+importe", para que la lista cuadre con lo que dice el resumen.
+
+De cada gasto se guarda concepto, importe, fecha y categoría (cuota,
+mutualidad, material, desplazamiento, cursos, otros). **Se pulsa el gasto para
+editarlo** y el único botón de la fila es el de borrar: dos botones por fila
+dejaban los nombres de los equipos sin sitio en una pantalla de móvil. Se guardan por cuenta,
+igual que los partidos, y entran en el balance de la temporada en la que cae su
+fecha.
 
 ## Varias cuentas de Google
 

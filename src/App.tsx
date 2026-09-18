@@ -358,6 +358,12 @@ export default function App() {
     setExpenses((current) => [...current, { ...expense, id }])
   }, [])
 
+  const updateExpense = useCallback((id: string, changes: Omit<Expense, 'id'>) => {
+    setExpenses((current) =>
+      current.map((expense) => (expense.id === id ? { ...changes, id } : expense)),
+    )
+  }, [])
+
   const deleteExpense = useCallback((id: string) => {
     setExpenses((current) => current.filter((expense) => expense.id !== id))
   }, [])
@@ -558,6 +564,7 @@ export default function App() {
           season={season}
           onSeason={setSeason}
           onAdd={addExpense}
+          onUpdate={updateExpense}
           onDelete={deleteExpense}
         />
       )}
