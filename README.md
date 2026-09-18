@@ -318,6 +318,35 @@ La compilación genera mapas de código (`build.sourcemap`) y los errores guarda
 tipo y origen. Es lo que permitió localizar esto: el mensaje del móvil traía
 `index-CQE37LPl.js:18:1056`, y el mapa lo situó en `getTextContent()`.
 
+## Balance de la temporada
+
+La segunda pantalla lleva las cuentas: lo ganado, lo gastado y lo que queda.
+
+- **Bruto**: todo lo arbitrado en la temporada, cobrado o no. Es lo que se ha
+  ganado; lo pendiente de cobro ya se ve en la pantalla de partidos.
+- **Neto**: bruto menos los gastos apuntados.
+- Se desglosa además en cobrado y por cobrar, y los gastos por categoría.
+
+No entran los partidos borrados, las demos ni los anulados: no se arbitran, así
+que no son dinero.
+
+Si algún partido de la temporada se quedó sin importe leído, el balance lo avisa
+en vez de callárselo — el bruto se quedaría corto y parecería que se ha ganado
+menos de lo real.
+
+### Dónde empieza una temporada
+
+De septiembre a junio, pero el corte está el **1 de julio**: los amistosos de
+pretemporada de julio y agosto pertenecen a la temporada que empieza, no a la
+que acaba de terminar. Con el corte en septiembre se quedarían fuera de todo
+balance (`src/lib/season.ts`).
+
+### Gastos
+
+Concepto, importe, fecha y categoría (cuota, mutualidad, material,
+desplazamiento, cursos, otros). Se guardan por cuenta, igual que los partidos, y
+entran en el balance de la temporada en la que cae su fecha.
+
 ## Varias cuentas de Google
 
 Los partidos se guardan por cuenta: `pa.matches.v1:<correo>`. Al sincronizar se

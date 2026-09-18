@@ -63,6 +63,13 @@ export function formatKickoff(iso: string | null): string {
   return timePart ? `${label}, ${timePart}` : label
 }
 
+/** "2026-09-01" -> "1 sep 2026" */
+export function formatShortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const corto = MONTHS[m - 1]?.slice(0, 3) ?? ''
+  return `${d} ${corto} ${y}`
+}
+
 /** Un partido ya jugado es un partido que te deben. */
 export function isPast(iso: string | null): boolean {
   if (!iso) return true

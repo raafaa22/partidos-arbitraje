@@ -67,3 +67,32 @@ export interface Settings {
 }
 
 export type Filter = 'jugados' | 'proximos' | 'pagados' | 'demos' | 'anulados' | 'papelera'
+
+/** Las categorías de gasto de un árbitro. */
+export type ExpenseCategory =
+  | 'cuota'
+  | 'mutualidad'
+  | 'material'
+  | 'desplazamiento'
+  | 'cursos'
+  | 'otros'
+
+export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
+  { id: 'cuota', label: 'Cuota' },
+  { id: 'mutualidad', label: 'Mutualidad' },
+  { id: 'material', label: 'Material' },
+  { id: 'desplazamiento', label: 'Desplazamiento' },
+  { id: 'cursos', label: 'Cursos y exámenes' },
+  { id: 'otros', label: 'Otros' },
+]
+
+/** Un gasto derivado del arbitraje. */
+export interface Expense {
+  id: string
+  concept: string
+  /** En euros. */
+  amount: number
+  /** Fecha del gasto, ISO "aaaa-mm-dd". */
+  date: string
+  category: ExpenseCategory
+}

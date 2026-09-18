@@ -1,8 +1,9 @@
-import type { Match, MatchFlags, Settings } from '../types'
+import type { Expense, Match, MatchFlags, Settings } from '../types'
 
 const MATCHES_KEY = 'pa.matches.v1'
 const FLAGS_KEY = 'pa.flags.v1'
 const SETTINGS_KEY = 'pa.settings.v1'
+const EXPENSES_KEY = 'pa.expenses.v1'
 const ACCOUNT_KEY = 'pa.account.v1'
 
 /**
@@ -39,7 +40,7 @@ export function saveAccount(account: string | null): void {
  */
 export function adoptLegacyData(account: string): void {
   try {
-    for (const base of [MATCHES_KEY, FLAGS_KEY]) {
+    for (const base of [MATCHES_KEY, FLAGS_KEY, EXPENSES_KEY]) {
       const legacy = localStorage.getItem(base)
       if (legacy === null) continue
       if (localStorage.getItem(scoped(base, account)) === null) {
@@ -139,6 +140,11 @@ export const loadMatches = (account: string | null): Match[] =>
   read<Match[]>(scoped(MATCHES_KEY, account), [])
 export const saveMatches = (account: string | null, matches: Match[]): string | null =>
   write(scoped(MATCHES_KEY, account), matches)
+
+export const loadExpenses = (account: string | null): Expense[] =>
+  read<Expense[]>(scoped(EXPENSES_KEY, account), [])
+export const saveExpenses = (account: string | null, expenses: Expense[]): string | null =>
+  write(scoped(EXPENSES_KEY, account), expenses)
 
 export const loadFlags = (account: string | null): Record<string, MatchFlags> =>
   read(scoped(FLAGS_KEY, account), {})

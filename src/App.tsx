@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import BalanceView from './components/BalanceView'
 import MatchCard from './components/MatchCard'
 import MatchDetail from './components/MatchDetail'
 import SettingsPanel from './components/SettingsPanel'
 import { clearToken, forgetToken, getAccessToken, isSignedOut, storedToken } from './auth/google'
 import { GmailError, getAccountEmail } from './gmail/api'
 import { formatEuro, isPast } from './lib/text'
+import { currentSeason } from './lib/season'
 import {
   DATA_VERSION, EMPTY_FLAGS, adoptLegacyData, effectiveAmount, effectiveDemo, flagsFor,
-  gmailQuery, loadAccount, loadFlags, loadMatches, loadSettings, saveAccount, saveFlags,
-  saveMatches, saveSettings,
+  gmailQuery, loadAccount, loadExpenses, loadFlags, loadMatches, loadSettings, saveAccount,
+  saveExpenses, saveFlags, saveMatches, saveSettings,
 } from './store/db'
 import { markOldAsPaid, purgeJunk, resolveDesignations } from './store/resolve'
 import { reparseMatch, refreshMatch, syncMatches, type SyncProgress } from './sync'
-import type { Filter, Match, MatchFlags, Settings } from './types'
+import type { Expense, Filter, Match, MatchFlags, Settings } from './types'
 
 /** Cuántos partidos se pintan de una tanda. */
 const PAGE = 40
@@ -32,6 +34,7 @@ export default function App() {
   const [account, setAccount] = useState<string | null>(loadAccount)
   const [matches, setMatches] = useState<Match[]>(() => loadMatches(loadAccount()))
   const [flags, setFlags] = useState<Record<string, MatchFlags>>(() => loadFlags(loadAccount()))
+  const [expenses, setExpenses] = useState<Expense[]>(() => loadExpenses(loadAccount()))
 
   const [token, setToken] = useState<string | null>(storedToken)
   // Cerrar sesión a mano lleva a la pantalla de entrada. Que caduque el token
@@ -43,6 +46,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const [view, setView] = useState<'partidos' | 'balance'>('partidos')
+  const [season, setSeason] = useState(currentSeason)
   const [filter, setFilter] = useState<Filter>('jugados')
   // Con cientos de partidos, pintarlos todos de golpe deja el móvil pillado y
   // los filtros parecen no responder. Se enseñan por tandas.
@@ -59,6 +64,9 @@ export default function App() {
   useEffect(() => {
     setStorageError((current) => saveFlags(account, flags) ?? current)
   }, [account, flags])
+  useEffect(() => {
+    setStorageError((current) => saveExpenses(account, expenses) ?? current)
+  }, [account, expenses])
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
@@ -160,6 +168,7 @@ export default function App() {
           saveAccount(email)
           setMatches(mine.matches)
           setFlags(mine.flags)
+          setExpenses(loadExpenses(email))
         }
 
         const known = latest.current
@@ -344,8 +353,17 @@ export default function App() {
     }
   }
 
+  const addExpense = useCallback((expense: Omit<Expense, 'id'>) => {
+    const id = `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    setExpenses((current) => [...current, { ...expense, id }])
+  }, [])
+
+  const deleteExpense = useCallback((id: string) => {
+    setExpenses((current) => current.filter((expense) => expense.id !== id))
+  }, [])
+
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ matches, flags, settings }, null, 2)], {
+    const blob = new Blob([JSON.stringify({ matches, flags, expenses, settings }, null, 2)], {
       type: 'application/json',
     })
     const url = URL.createObjectURL(blob)
@@ -358,6 +376,7 @@ export default function App() {
 
   const wipe = () => {
     apply([], {})
+    setExpenses([])
     setShowSettings(false)
     setNotice('Datos borrados. Sincroniza para volver a traerlos de Gmail.')
   }
@@ -414,26 +433,23 @@ export default function App() {
         </div>
       </header>
 
-      <section className="hero">
-        <div className="hero-label">Te deben</div>
-        <p className="hero-value">{formatEuro(owed)}</p>
-        <div className="hero-sub">
-          {buckets.pendientes.length} partido{buckets.pendientes.length === 1 ? '' : 's'} jugado
-          {buckets.pendientes.length === 1 ? '' : 's'} sin cobrar
-          {unreadable > 0 && ` · ${unreadable} sin importe leído`}
-        </div>
-      </section>
-
-      <div className="mini-stats">
-        <div className="mini">
-          <span>Próximos</span>
-          <strong>{formatEuro(upcoming)}</strong>
-        </div>
-        <div className="mini">
-          <span>Cobrado</span>
-          <strong>{formatEuro(collected)}</strong>
-        </div>
-      </div>
+      {/* Dos pantallas: los partidos y las cuentas de la temporada. */}
+      <nav className="views">
+        <button
+          className="chip"
+          aria-pressed={view === 'partidos'}
+          onClick={() => setView('partidos')}
+        >
+          Partidos
+        </button>
+        <button
+          className="chip"
+          aria-pressed={view === 'balance'}
+          onClick={() => setView('balance')}
+        >
+          Balance
+        </button>
+      </nav>
 
       {!token && (
         <div className="notice error">
@@ -456,60 +472,96 @@ export default function App() {
         </div>
       )}
 
-      <nav className="filters">
-        {FILTERS.map((item) => (
-          <button
-            key={item.id}
-            className="chip"
-            aria-pressed={filter === item.id}
-            onClick={() => {
-              setFilter(item.id)
-              setShown(PAGE)
-              // Sin esto, al pasar de una lista larga a una corta la pagina
-              // encoge, el navegador deja el scroll al final y parece que no
-              // ha cambiado nada.
-              window.scrollTo({ top: 0, behavior: 'smooth' })
-            }}
-          >
-            {item.label}
-            <span className="count">{buckets[item.id].length}</span>
-          </button>
-        ))}
-      </nav>
+      {view === 'partidos' ? (
+        <>
+        <section className="hero">
+          <div className="hero-label">Te deben</div>
+          <p className="hero-value">{formatEuro(owed)}</p>
+          <div className="hero-sub">
+            {buckets.pendientes.length} partido{buckets.pendientes.length === 1 ? '' : 's'} jugado
+            {buckets.pendientes.length === 1 ? '' : 's'} sin cobrar
+            {unreadable > 0 && ` · ${unreadable} sin importe leído`}
+          </div>
+        </section>
 
-      {visible.length === 0 ? (
-        <div className="empty">
-          {filter === 'jugados'
-            ? 'Todavía no hay partidos jugados. Sincroniza para traerlos de Gmail.'
-            : 'Nada por aquí.'}
+        <div className="mini-stats">
+          <div className="mini">
+            <span>Próximos</span>
+            <strong>{formatEuro(upcoming)}</strong>
+          </div>
+          <div className="mini">
+            <span>Cobrado</span>
+            <strong>{formatEuro(collected)}</strong>
+          </div>
         </div>
+
+        <nav className="filters">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              className="chip"
+              aria-pressed={filter === item.id}
+              onClick={() => {
+                setFilter(item.id)
+                setShown(PAGE)
+                // Sin esto, al pasar de una lista larga a una corta la pagina
+                // encoge, el navegador deja el scroll al final y parece que no
+                // ha cambiado nada.
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              {item.label}
+              <span className="count">{buckets[item.id].length}</span>
+            </button>
+          ))}
+        </nav>
+
+        {visible.length === 0 ? (
+          <div className="empty">
+            {filter === 'jugados'
+              ? 'Todavía no hay partidos jugados. Sincroniza para traerlos de Gmail.'
+              : 'Nada por aquí.'}
+          </div>
+        ) : (
+          visible.slice(0, shown).map((row) => (
+            <MatchCard
+              key={row.match.id}
+              match={row.match}
+              flags={row.flags}
+              amount={row.amount}
+              isDemo={row.isDemo}
+              onTogglePaid={() =>
+                updateFlags(row.match.id, {
+                  paid: !row.flags.paid,
+                  paidAt: row.flags.paid ? null : new Date().toISOString(),
+                })
+              }
+              onOpen={() => setOpenId(row.match.id)}
+              onDelete={() => updateFlags(row.match.id, { deleted: true, deletedAt: new Date().toISOString() })}
+              onRestore={() => updateFlags(row.match.id, { deleted: false, deletedAt: null })}
+            />
+          ))
+        )}
+
+        {visible.length > shown && (
+          <button className="primary show-more" onClick={() => setShown((current) => current + PAGE)}>
+            Mostrar {Math.min(PAGE, visible.length - shown)} más
+            <span className="rest"> · quedan {visible.length - shown}</span>
+          </button>
+        )}
+        </>
       ) : (
-        visible.slice(0, shown).map((row) => (
-          <MatchCard
-            key={row.match.id}
-            match={row.match}
-            flags={row.flags}
-            amount={row.amount}
-            isDemo={row.isDemo}
-            onTogglePaid={() =>
-              updateFlags(row.match.id, {
-                paid: !row.flags.paid,
-                paidAt: row.flags.paid ? null : new Date().toISOString(),
-              })
-            }
-            onOpen={() => setOpenId(row.match.id)}
-            onDelete={() => updateFlags(row.match.id, { deleted: true, deletedAt: new Date().toISOString() })}
-            onRestore={() => updateFlags(row.match.id, { deleted: false, deletedAt: null })}
-          />
-        ))
+        <BalanceView
+          matches={matches}
+          flags={flags}
+          expenses={expenses}
+          season={season}
+          onSeason={setSeason}
+          onAdd={addExpense}
+          onDelete={deleteExpense}
+        />
       )}
 
-      {visible.length > shown && (
-        <button className="primary show-more" onClick={() => setShown((current) => current + PAGE)}>
-          Mostrar {Math.min(PAGE, visible.length - shown)} más
-          <span className="rest"> · quedan {visible.length - shown}</span>
-        </button>
-      )}
 
       {open && (
         <MatchDetail
