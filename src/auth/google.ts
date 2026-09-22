@@ -9,6 +9,8 @@ export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
 const TOKEN_KEY = 'pa.token.v1'
 /** Marca de que el usuario cerró sesión a mano, para distinguirlo de un token caducado. */
 const SIGNED_OUT_KEY = 'pa.signedOut.v1'
+/** Marca de que esta cuenta ya dio el permiso alguna vez en este dispositivo. */
+const CONSENT_KEY = 'pa.consent.v1'
 
 interface TokenResponse {
   access_token?: string
@@ -18,7 +20,7 @@ interface TokenResponse {
 }
 
 interface TokenClient {
-  requestAccessToken(options?: { prompt?: string }): void
+  requestAccessToken(options?: { prompt?: string; hint?: string }): void
   callback: (response: TokenResponse) => void
 }
 
@@ -70,8 +72,9 @@ function readStored(): StoredToken | null {
     const raw = localStorage.getItem(TOKEN_KEY)
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredToken
-    // Un minuto de margen para que no caduque a mitad de una sincronizacion.
-    return stored.expiresAt - 60_000 > Date.now() ? stored : null
+    // Cinco minutos de margen: una primera carga larga puede tardar un par de
+    // minutos y no puede quedarse a medias porque el token caduque por el camino.
+    return stored.expiresAt - 5 * 60_000 > Date.now() ? stored : null
   } catch {
     return null
   }
@@ -95,6 +98,19 @@ export function storedToken(): string | null {
  * sesion a mano tiene que llevar a la pantalla de entrada, o no hay forma de
  * saber si ha hecho algo.
  */
+/**
+ * Si esta cuenta ya concedió el permiso en este dispositivo. Solo entonces tiene
+ * sentido intentar renovar el token en silencio: sin consentimiento previo,
+ * Google abriría su ventana, que es justo lo que no se quiere al arrancar.
+ */
+export function hasConsent(): boolean {
+  try {
+    return localStorage.getItem(CONSENT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function isSignedOut(): boolean {
   try {
     return localStorage.getItem(SIGNED_OUT_KEY) === '1'
@@ -104,10 +120,21 @@ export function isSignedOut(): boolean {
 }
 
 /**
- * Consigue un token. Se llama siempre desde un gesto del usuario: Google abre
- * una ventana de permisos y los navegadores la bloquean si no viene de un clic.
+ * Consigue un token de acceso.
+ *
+ * Los tokens de Google duran una hora y en una app sin servidor no hay forma de
+ * guardar un token de refresco. Lo que sí se puede es pedir uno nuevo en
+ * silencio (`silent`), sin ventanas ni clics, mientras la sesión de Google del
+ * navegador siga viva y el permiso ya esté concedido. Es lo que evita tener que
+ * darle a "volver a conectar" cada hora.
+ *
+ * Sin `silent`, Google abre su ventana de permisos, así que hay que llamarlo
+ * desde un gesto del usuario o el navegador la bloquea.
  */
-export async function getAccessToken(clientId: string): Promise<string> {
+export async function getAccessToken(
+  clientId: string,
+  options: { silent?: boolean; hint?: string } = {},
+): Promise<string> {
   const cached = readStored()
   if (cached) return cached.accessToken
 
@@ -131,8 +158,9 @@ export async function getAccessToken(clientId: string): Promise<string> {
         store(token)
         try {
           localStorage.removeItem(SIGNED_OUT_KEY)
+          localStorage.setItem(CONSENT_KEY, '1')
         } catch {
-          // Sin almacenamiento no hay marca que borrar.
+          // Sin almacenamiento no hay marcas que tocar.
         }
         resolve(token.accessToken)
       },
@@ -140,7 +168,12 @@ export async function getAccessToken(clientId: string): Promise<string> {
         reject(new Error(error.message ?? 'No se ha podido conectar con Google.'))
       },
     })
-    client.requestAccessToken({ prompt: '' })
+    // El `hint` con el correo evita que Google pregunte por la cuenta cuando
+    // hay varias iniciadas en el navegador.
+    client.requestAccessToken({
+      prompt: options.silent ? 'none' : '',
+      ...(options.hint ? { hint: options.hint } : {}),
+    })
   })
 }
 
@@ -173,6 +206,7 @@ export async function forgetToken(): Promise<void> {
     const stored = localStorage.getItem(TOKEN_KEY)
     if (stored) raw = JSON.parse(stored) as StoredToken
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(CONSENT_KEY)
     localStorage.setItem(SIGNED_OUT_KEY, '1')
   } catch {
     // Sin almacenamiento no hay nada que borrar.

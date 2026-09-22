@@ -358,6 +358,30 @@ dejaban los nombres de los equipos sin sitio en una pantalla de móvil. Se guard
 igual que los partidos, y entran en el balance de la temporada en la que cae su
 fecha.
 
+## La sesión de Google
+
+Los tokens de Google duran **una hora** y una app sin servidor no puede guardar
+un token de refresco. Lo que sí puede es pedir uno nuevo **en silencio**, sin
+ventanas ni clics, mientras la sesión de Google del navegador siga viva y el
+permiso ya esté concedido (`ensureToken` en `src/App.tsx`).
+
+Se intenta al abrir la app y antes de cada sincronización, y también si el token
+se muere a mitad de una descarga larga: ahí se renueva y se reanuda en vez de
+echar al usuario a la pantalla de conectar.
+
+La renovación callada solo se prueba si esta cuenta **ya dio el permiso en este
+dispositivo** (`pa.consent.v1`) y no se cerró sesión a mano. Sin esa condición,
+Google abriría su ventana nada más abrir la app, que es peor que el aviso de
+reconectar.
+
+### Cuidado con los 403
+
+Un corte por cuota de Gmail llega como **403**, igual que una sesión sin
+permisos. Tratar cualquier 403 como sesión caducada tiraba un token
+perfectamente válido y obligaba a reconectar cada vez que Google frenaba las
+peticiones, que en la primera carga es constantemente. Solo un **401** cierra la
+sesión.
+
 ## Varias cuentas de Google
 
 Los partidos se guardan por cuenta: `pa.matches.v1:<correo>`. Al sincronizar se

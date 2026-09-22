@@ -3,8 +3,10 @@ import BalanceView from './components/BalanceView'
 import MatchCard from './components/MatchCard'
 import MatchDetail from './components/MatchDetail'
 import SettingsPanel from './components/SettingsPanel'
-import { clearToken, forgetToken, getAccessToken, isSignedOut, storedToken } from './auth/google'
-import { GmailError, getAccountEmail } from './gmail/api'
+import {
+  clearToken, forgetToken, getAccessToken, hasConsent, isSignedOut, storedToken,
+} from './auth/google'
+import { GmailError, QuotaError, getAccountEmail } from './gmail/api'
 import { formatEuro, isPast } from './lib/text'
 import { currentSeason } from './lib/season'
 import {
@@ -149,8 +151,35 @@ export default function App() {
     )
   }, [tidyUp])
 
+  /**
+   * Un token válido, renovándolo en silencio si hace falta y se puede.
+   *
+   * Los de Google duran una hora. Sin esto había que darle a "volver a
+   * conectar" cada hora, que es lo que hacía la app inusable. La renovación
+   * callada solo se intenta si esta cuenta ya dio el permiso aquí y no se cerró
+   * sesión a mano: si no, Google abriría su ventana sin venir a cuento.
+   */
+  const ensureToken = useCallback(async (): Promise<string | null> => {
+    const existing = storedToken()
+    if (existing) return existing
+    if (!hasConsent() || isSignedOut()) return null
+
+    try {
+      const renewed = await getAccessToken(settings.clientId, {
+        silent: true,
+        ...(account ? { hint: account } : {}),
+      })
+      setToken(renewed)
+      setSignedOut(false)
+      return renewed
+    } catch {
+      // La sesión de Google del navegador ya no vale: hace falta un clic.
+      return null
+    }
+  }, [account, settings.clientId])
+
   const sync = useCallback(
-    async (accessToken: string) => {
+    async (accessToken: string, { retry = true }: { retry?: boolean } = {}) => {
       if (running.current) return
       running.current = true
       setSyncing(true)
@@ -236,10 +265,32 @@ export default function App() {
         }
         setSettings((current) => ({ ...current, lastSync: new Date().toISOString() }))
       } catch (caught) {
-        if (caught instanceof GmailError && (caught.status === 401 || caught.status === 403)) {
+        // Un corte por cuota TAMBIÉN llega como 403. Tratarlo como sesión
+        // caducada tiraba un token bueno y obligaba a reconectar cada vez que
+        // Google frenaba las peticiones, que es a menudo en la primera carga.
+        if (caught instanceof QuotaError) {
+          setError(
+            'Google ha cortado por exceso de peticiones. Espera un minuto y vuelve a ' +
+              'sincronizar: la sesión sigue abierta.',
+          )
+        } else if (caught instanceof GmailError && caught.status === 401) {
           clearToken()
           setToken(null)
+          // El token se ha muerto a mitad. Se intenta renovar en silencio y
+          // seguir: echar al usuario a la pantalla de conectar por esto sería
+          // perder la sincronización a medias sin motivo.
+          if (retry) {
+            running.current = false
+            const renewed = await ensureToken()
+            if (renewed) {
+              await sync(renewed, { retry: false })
+              return
+            }
+          }
           setError('La sesión de Google ha caducado. Vuelve a conectar.')
+        } else if (caught instanceof GmailError && caught.status === 403) {
+          // 403 sin ser cuota: permisos. La sesión vale, lo que falta es acceso.
+          setError(`Google ha denegado el acceso: ${caught.message}`)
         } else {
           setError(caught instanceof Error ? caught.message : String(caught))
         }
@@ -249,14 +300,16 @@ export default function App() {
         setProgress(null)
       }
     },
-    [account, apply, tidyUp, settings],
+    [account, apply, ensureToken, tidyUp, settings],
   )
 
   const connect = useCallback(async () => {
     setConnecting(true)
     setError(null)
     try {
-      const accessToken = await getAccessToken(settings.clientId)
+      const accessToken = await getAccessToken(settings.clientId, {
+        ...(account ? { hint: account } : {}),
+      })
       setToken(accessToken)
       setSignedOut(false)
       return accessToken
@@ -279,17 +332,19 @@ export default function App() {
       setSettings((current) => ({ ...current, dataVersion: DATA_VERSION }))
     }
 
-    const existing = storedToken()
-    if (existing) void sync(existing)
+    void (async () => {
+      const accessToken = await ensureToken()
+      if (accessToken) void sync(accessToken)
+    })()
     // Solo al montar: las sincronizaciones posteriores las pide el usuario.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /** Reconecta y sincroniza: lo que hace el botón cuando la sesión ha caducado. */
   const reconnect = useCallback(async () => {
-    const accessToken = await connect()
+    const accessToken = (await ensureToken()) ?? (await connect())
     if (accessToken) await sync(accessToken)
-  }, [connect, sync])
+  }, [connect, ensureToken, sync])
 
   const rows = useMemo(
     () =>
@@ -472,7 +527,7 @@ export default function App() {
         <div className="top-actions">
           <button
             className="icon-btn"
-            onClick={() => void (token ? sync(token) : reconnect())}
+            onClick={() => void reconnect()}
             disabled={syncing || connecting}
             aria-label="Sincronizar"
           >
